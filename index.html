@@ -3,21 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>モンスト周回カウンター (localStorage版)</title>
+    <title>モンスト周回カウンター (勝率計算機能つき)</title>
     <style>
-        /* 見やすいように簡単なデザインを適用 */
+        /* デザイン部分は変更なし */
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f0f2f5; color: #1c1e21; padding: 20px; }
-        .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        h1, h2 { text-align: center; }
-        .add-form { display: flex; gap: 10px; margin-bottom: 20px; }
-        .add-form input { flex-grow: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; }
-        .add-form button { padding: 10px 15px; border: none; background-color: #1877f2; color: white; border-radius: 6px; cursor: pointer; }
-        .counter-list { display: flex; flex-direction: column; gap: 10px; }
-        .counter-item { display: flex; align-items: center; padding: 15px; border: 1px solid #ddd; border-radius: 6px; }
-        .counter-item .name { flex-grow: 1; font-size: 1.2rem; }
-        .counter-item .count { font-size: 1.5rem; font-weight: bold; margin: 0 15px; }
-        .counter-item .actions button { margin-left: 5px; cursor: pointer; padding: 5px 10px; }
-        .counter-item .delete-btn { background-color: #e4e6eb; border: 1px solid #ccc; color: #606770; }
+        .container { max-width: 700px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h1, h2 { text-align: center; color: #333; }
+        .add-form { display: flex; gap: 10px; margin-bottom: 25px; }
+        .add-form input { flex-grow: 1; padding: 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem; }
+        .add-form button { padding: 12px 18px; border: none; background-color: #007bff; color: white; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        .counter-list { display: flex; flex-direction: column; gap: 15px; }
+        .counter-item { padding: 15px; border: 1px solid #ddd; border-radius: 8px; background-color: #f9f9f9; }
+        .counter-item .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .counter-item .name { font-size: 1.4rem; font-weight: bold; }
+        .counter-item .delete-btn { background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+        .counter-item .body { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; }
+        .counter-item .stat-box { padding: 10px; background-color: #fff; border-radius: 6px; }
+        .counter-item .stat-box .label { font-size: 0.9rem; color: #606770; }
+        .counter-item .stat-box .value { font-size: 1.8rem; font-weight: bold; }
+        .counter-item .actions { grid-column: 1 / -1; display: flex; gap: 10px; margin-top: 15px; }
+        .counter-item .actions button { flex-grow: 1; padding: 12px; font-size: 1.1rem; border-radius: 6px; cursor: pointer; border: none; font-weight: bold; }
+        .counter-item .win-btn { background-color: #28a745; color: white; }
+        .counter-item .lose-btn { background-color: #ffc107; color: #212529; }
     </style>
 </head>
 <body>
@@ -27,115 +34,108 @@
 
         <div class="add-form">
             <input type="text" id="questNameInput" placeholder="新しいクエスト名を入力">
-            <button id="addBtn">追加</button>
+            <button id="addBtn">カウンター追加</button>
         </div>
 
-        <h2>カウンター一覧</h2>
         <div id="counterList" class="counter-list">
             </div>
     </div>
 
     <script>
-        // --- ここからがJavaScript ---
-
         const questNameInput = document.getElementById('questNameInput');
         const addBtn = document.getElementById('addBtn');
         const counterList = document.getElementById('counterList');
-        const STORAGE_KEY = 'monstCounters'; // ローカルストレージに保存するときのキー
+        const STORAGE_KEY = 'monstCountersWinRate';
 
-        // データは配列として管理する [{id: 1, name: '天魔1', count: 10}, {id: 2, name: '黎絶', count: 5}]
         let counters = [];
 
-        // --- データの保存と読み込み ---
-        
-        // 現在のカウンター配列をローカルストレージに保存する関数
         function saveCounters() {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(counters));
         }
 
-        // ローカルストレージからデータを読み込む関数
         function loadCounters() {
             const data = localStorage.getItem(STORAGE_KEY);
-            if (data) {
-                counters = JSON.parse(data);
-            }
+            counters = data ? JSON.parse(data) : [];
         }
 
-        // --- 画面の描画 ---
-
-        // 現在のcounters配列をもとに、画面全体を再描画する関数
         function renderCounters() {
-            counterList.innerHTML = ''; // 一旦リストを空にする
+            counterList.innerHTML = '';
             counters.forEach(counter => {
+                const totalGames = counter.wins + counter.losses;
+                const winRate = totalGames > 0 ? ((counter.wins / totalGames) * 100).toFixed(1) : '0.0';
                 const counterElement = document.createElement('div');
                 counterElement.className = 'counter-item';
                 counterElement.dataset.id = counter.id;
-
                 counterElement.innerHTML = `
-                    <div class="name">${counter.name}</div>
-                    <div class="actions">
-                        <button class="minus-btn">-</button>
-                    </div>
-                    <div class="count">${counter.count}</div>
-                    <div class="actions">
-                        <button class="plus-btn">+</button>
+                    <div class="header">
+                        <div class="name">${counter.name}</div>
                         <button class="delete-btn">削除</button>
+                    </div>
+                    <div class="body">
+                        <div class="stat-box">
+                            <div class="label">勝ち</div>
+                            <div class="value">${counter.wins}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="label">負け</div>
+                            <div class="value">${counter.losses}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="label">勝率</div>
+                            <div class="value">${winRate}%</div>
+                        </div>
+                        <div class="actions">
+                            <button class="win-btn">🎉 勝ち</button>
+                            <button class="lose-btn">💧 負け</button>
+                        </div>
                     </div>
                 `;
                 counterList.appendChild(counterElement);
             });
         }
         
-        // --- イベント処理 ---
-
-        // 「追加」ボタンが押されたときの処理
+        // ★★★ ここを修正しました ★★★
         addBtn.addEventListener('click', () => {
             const questName = questNameInput.value.trim();
             if (questName === '') {
-                alert('クエスト名を入力してください');
+                alert('クエスト名を入力してください'); // アラートを追加
                 return;
             }
 
-            const newCounter = {
-                id: Date.now(), // ユニークなIDとして現在時刻を利用
+            counters.push({
+                id: Date.now(),
                 name: questName,
-                count: 0
-            };
-            counters.push(newCounter);
-            questNameInput.value = ''; // 入力欄を空にする
-
-            saveCounters(); // 保存
-            renderCounters(); // 再描画
+                wins: 0,
+                losses: 0
+            });
+            questNameInput.value = '';
+            saveCounters();
+            renderCounters();
         });
 
-        // カウンターリスト内のボタン（+/-/削除）が押されたときの処理
         counterList.addEventListener('click', (event) => {
             const target = event.target;
             const parentItem = target.closest('.counter-item');
             if (!parentItem) return;
-
             const id = Number(parentItem.dataset.id);
-            const counterIndex = counters.findIndex(c => c.id === id);
-            
-            if (target.classList.contains('plus-btn')) {
-                counters[counterIndex].count++;
-            } else if (target.classList.contains('minus-btn')) {
-                if (counters[counterIndex].count > 0) {
-                   counters[counterIndex].count--;
-                }
+            const counter = counters.find(c => c.id === id);
+            if (!counter) return;
+
+            if (target.classList.contains('win-btn')) {
+                counter.wins++;
+            } else if (target.classList.contains('lose-btn')) {
+                counter.losses++;
             } else if (target.classList.contains('delete-btn')) {
-                if (confirm(`「${counters[counterIndex].name}」を削除しますか？`)) {
-                    counters.splice(counterIndex, 1);
+                if (confirm(`「${counter.name}」を削除しますか？`)) {
+                    counters = counters.filter(c => c.id !== id);
                 }
+            } else {
+                return;
             }
-            
-            saveCounters(); // 保存
-            renderCounters(); // 再描画
+            saveCounters();
+            renderCounters();
         });
 
-        // --- 初期化処理 ---
-        
-        // ページが読み込まれたときに実行
         loadCounters();
         renderCounters();
     </script>
